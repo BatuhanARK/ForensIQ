@@ -646,22 +646,15 @@ class ForensicsEngine:
     def _signal_blocking_artifact(self, gray: np.ndarray) -> tuple:
         """@brief Signal 7: Block boundary artifact metric (BAM)."""
         try:
-            h, w       = gray.shape
-            gray_f     = gray.astype(np.float64)
-            h_diffs, v_diffs = [], []
-            for bsize in [8, 16]:
-                for y in range(bsize, h - bsize, bsize):
-                    row_diff = float(np.abs(gray_f[y, :] - gray_f[y-1, :]).mean())
-                    interior = float(np.abs(np.diff(gray_f[y-bsize:y, :], axis=0)).mean())
-                    if interior > 0:
-                        h_diffs.append(row_diff / (interior + 1e-6))
-                for x in range(bsize, w - bsize, bsize):
-                    col_diff = float(np.abs(gray_f[:, x] - gray_f[:, x-1]).mean())
-                    interior = float(np.abs(np.diff(gray_f[:, x-bsize:x], axis=1)).mean())
-                    if interior > 0:
-                        v_diffs.append(col_diff / (interior + 1e-6))
+            h, w   = gray.shape
+            gray_f = gray.astype(np.float64)
+
+            h_diffs = self._collect_boundary_diffs_h(gray_f, h, w)
+            v_diffs = self._collect_boundary_diffs_v(gray_f, h, w)
+
             if not h_diffs or not v_diffs:
                 return (40.0, "Blok analizi: yetersiz veri")
+
             bam = float(np.mean(h_diffs + v_diffs))
             if bam > 2.0:
                 return (72.0, f"Güçlü blok artefakları (BAM={bam:.2f}) — VAE/GAN ızgara imzası")
