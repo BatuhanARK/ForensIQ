@@ -192,9 +192,12 @@ class ForensicsEngine:
             if descs is None or len(kps) < 10:
                 return self._empty_result(algo_id, "Insufficient keypoints")
 
-            matcher  = self.bf_hamming if algo_id == "orb" else self.bf_matcher
+            # BRISK and ORB use binary descriptors → Hamming distance
+            # SIFT and AKAZE use float descriptors → L2 distance
+            use_hamming = algo_id in ("orb", "surf")  # surf = BRISK replacement
+            matcher  = self.bf_hamming if use_hamming else self.bf_matcher
             matches  = matcher.knnMatch(descs, descs, k=3)
-            ratio    = 0.75 if algo_id in ("sift", "surf") else 0.80
+            ratio    = 0.75 if algo_id == "sift" else 0.80
 
             good_matches, regions = self._filter_matches(matches, kps, ratio)
 
@@ -262,12 +265,10 @@ class ForensicsEngine:
         if algo_id == "sift":
             return cv2.SIFT_create(nfeatures=2000)
         elif algo_id == "surf":
-            try:
-                return cv2.xfeatures2d.SURF_create(400)
-            except AttributeError:
-                # SURF requires opencv-contrib; fall back to SIFT silently
-                logger.warning("SURF not available, using SIFT as fallback")
-                return cv2.SIFT_create(nfeatures=2000)
+            # SURF is patent-restricted in standard OpenCV builds.
+            # BRISK (Binary Robust Invariant Scalable Keypoints) is used as a
+            # drop-in replacement: patent-free, similar accuracy and speed.
+            return cv2.BRISK_create()
         elif algo_id == "akaze":
             return cv2.AKAZE_create()
         elif algo_id == "orb":

@@ -175,8 +175,8 @@ def list_algorithms():
     algos = [
         {"id": "sift",  "name": "SIFT",  "full": "Scale-Invariant Feature Transform",
          "description": "Kopyala-yapıştır manipülasyonlarını tespit eder."},
-        {"id": "surf",  "name": "SURF",  "full": "Speeded-Up Robust Features",
-         "description": "SIFT'in hızlandırılmış versiyonu."},
+        {"id": "surf",  "name": "SURF",  "full": "Speeded-Up Robust Features (BRISK)",
+         "description": "Patent kısıtlaması nedeniyle BRISK ile ikame edildi. Benzer doğruluk, daha hızlı."},
         {"id": "akaze", "name": "AKAZE", "full": "Accelerated KAZE",
          "description": "Doğrusal olmayan difüzyon filtresi tabanlı."},
         {"id": "orb",   "name": "ORB",   "full": "Oriented FAST and Rotated BRIEF",
