@@ -1,0 +1,27 @@
+# Environment variables
+.venv/
+venv/
+env/
+.env
+
+# CLIP model
+clip_weights.pth
+clip_processor/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+
+# Log
+*.log
+
+# Test images
+*.jpg
+*.jpeg
+*.png
+*.gif

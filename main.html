@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ForensIQ — Görüntü Sahteciliği Tespit Sistemi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
+<style>
+/* ===== DESIGN TOKENS ===== */
+:root {
+  --bg:        #080c12;
+  --surface:   #0d1520;
+  --surface2:  #111d2e;
+  --border:    #1e3352;
+  --accent:    #00e5ff;
+  --accent2:   #ff3d6b;
+  --accent3:   #a3ff47;
+  --text:      #e8f4ff;
+  --muted:     #5a7a99;
+  --danger:    #ff3d6b;
+  --safe:      #a3ff47;
+  --warn:      #ffcc00;
+  --ai:        #c77dff;
+  --mono:      'Space Mono', monospace;
+  --sans:      'Syne', sans-serif;
+  --radius:    6px;
+  --glow:      0 0 20px rgba(0,229,255,0.18);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ===== GRID NOISE BACKGROUND ===== */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(0,229,255,.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,255,.025) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ===== LAYOUT ===== */
+.app { position: relative; z-index: 1; }
+
+/* ===== HEADER ===== */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 36px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(8,12,18,.9);
+  backdrop-filter: blur(12px);
+  position: sticky; top: 0; z-index: 100;
+}
+.logo {
+  font-family: var(--mono);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  display: flex; align-items: center; gap: 10px;
+}
+.logo .bracket { color: var(--accent); }
+.logo .name { color: var(--text); }
+.logo .tag {
+  font-size: .6rem;
+  background: var(--accent);
+  color: var(--bg);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 700;
+  letter-spacing: .12em;
+}
+.nav-pills { display: flex; gap: 8px; }
+.pill {
+  font-family: var(--mono);
+  font-size: .7rem;
+  letter-spacing: .1em;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all .2s;
+  text-decoration: none;
+}
+.pill:hover, .pill.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(0,229,255,.06);
+}
+
+/* ===== MAIN PANELS ===== */
+main { display: grid; grid-template-columns: 340px 1fr; min-height: calc(100vh - 61px); }
+
+/* ===== SIDEBAR ===== */
+aside {
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  padding: 28px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  overflow-y: auto;
+}
+
+.section-label {
+  font-family: var(--mono);
+  font-size: .65rem;
+  letter-spacing: .2em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+/* Drop Zone */
+.drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 28px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .25s;
+  position: relative;
+  overflow: hidden;
+}
+.drop-zone:hover, .drop-zone.drag-over {
+  border-color: var(--accent);
+  background: rgba(0,229,255,.04);
+}
+.drop-zone input[type=file] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 2;
+}
+.drop-icon { font-size: 2.2rem; margin-bottom: 10px; display: block; }
+.drop-zone h3 { font-size: .9rem; font-weight: 600; margin-bottom: 4px; }
+.drop-zone p { font-size: .72rem; color: var(--muted); }
+.drop-zone.has-file { border-color: var(--accent3); border-style: solid; }
+.drop-zone.has-file .drop-icon { filter: grayscale(0); }
+
+/* Preview thumb */
+#preview-thumb {
+  width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  border-radius: 4px;
+  margin-top: 10px;
+  display: none;
+  border: 1px solid var(--border);
+}
+
+/* Algorithm checkboxes */
+.algo-grid { display: flex; flex-direction: column; gap: 8px; }
+.algo-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all .2s;
+  user-select: none;
+}
+.algo-item:hover { border-color: var(--accent); background: rgba(0,229,255,.04); }
+.algo-item.selected { border-color: var(--accent); background: rgba(0,229,255,.08); }
+.algo-check {
+  width: 16px; height: 16px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .7rem;
+  transition: all .2s;
+}
+.algo-item.selected .algo-check {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+.algo-name { font-family: var(--mono); font-size: .8rem; font-weight: 700; }
+.algo-desc { font-size: .65rem; color: var(--muted); margin-top: 1px; line-height: 1.3; }
+
+/* Analyze button */
+.btn-analyze {
+  width: 100%;
+  padding: 14px;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: .85rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  cursor: pointer;
+  transition: all .2s;
+  position: relative;
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-analyze:hover:not(:disabled) {
+  background: #33ecff;
+  box-shadow: 0 0 24px rgba(0,229,255,.4);
+  transform: translateY(-1px);
+}
+.btn-analyze:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+/* Spinner */
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(8,12,18,.4);
+  border-top-color: var(--bg);
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+  display: none;
+}
+.btn-analyze.loading .spinner { display: block; }
+.btn-analyze.loading .btn-text { opacity: .7; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* FSM status */
+.fsm-bar {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: .65rem;
+}
+.fsm-title { color: var(--muted); letter-spacing: .15em; margin-bottom: 8px; }
+.fsm-states { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.fsm-node {
+  padding: 3px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  transition: all .3s;
+}
+.fsm-node.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(0,229,255,.1);
+  box-shadow: 0 0 8px rgba(0,229,255,.2);
+}
+.fsm-node.done {
+  border-color: var(--accent3);
+  color: var(--accent3);
+  background: rgba(163,255,71,.06);
+}
+.fsm-arrow { color: var(--muted); font-size: .7rem; }
+
+/* ===== CONTENT AREA ===== */
+.content {
+  padding: 32px 36px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* Empty state */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--muted);
+  text-align: center;
+}
+.empty-state .big-icon { font-size: 4rem; opacity: .3; }
+.empty-state h2 { font-size: 1.2rem; font-weight: 600; opacity: .5; }
+.empty-state p { font-size: .8rem; opacity: .4; max-width: 280px; line-height: 1.6; }
+
+/* ===== VERDICT BANNER ===== */
+.vai {
+  margin-bottom: 20px;
+}
+.verdict-banner {
+  border-radius: var(--radius);
+  padding: 24px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  animation: fadeIn .4s ease;
+}
+.verdict-banner.tampered {
+  background: linear-gradient(135deg, rgba(255,61,107,.12), rgba(255,61,107,.04));
+  border: 1px solid rgba(255,61,107,.4);
+}
+.verdict-banner.clean {
+  background: linear-gradient(135deg, rgba(163,255,71,.1), rgba(163,255,71,.03));
+  border: 1px solid rgba(163,255,71,.35);
+}
+.verdict-left { display: flex; align-items: center; gap: 16px; }
+.verdict-icon { font-size: 2.5rem; }
+.verdict-title { font-size: 1.5rem; font-weight: 800; letter-spacing: .02em; }
+.verdict-banner.tampered .verdict-title { color: var(--danger); }
+.verdict-banner.clean .verdict-title { color: var(--safe); }
+.verdict-sub { font-size: .8rem; color: var(--muted); white-space: pre-line; margin-top: 3px; display: flex; gap: 4px; flex-direction: column; }
+
+.confidence-ring {
+  position: relative;
+  width: 90px; height: 90px;
+  flex-shrink: 0;
+}
+.confidence-ring svg { transform: rotate(-90deg); }
+.ring-bg { fill: none; stroke: var(--border); stroke-width: 6; }
+.ring-fill {
+  fill: none;
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset .8s ease;
+}
+.verdict-banner.tampered .ring-fill { stroke: var(--danger); }
+.verdict-banner.clean .ring-fill { stroke: var(--safe); }
+.ring-label {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  font-family: var(--mono);
+}
+.ring-pct { font-size: 1.1rem; font-weight: 700; line-height: 1; }
+.ring-txt { font-size: .5rem; color: var(--muted); letter-spacing: .1em; margin-top: 2px; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ===== AI BADGE ===== */
+.ai-badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(199,125,255,.35);
+  background: rgba(199,125,255,.06);
+  animation: fadeIn .4s .1s both;
+}
+/* AI ring color override */
+.ai-badge .ring-fill { stroke: var(--ai); }
+.ai-badge .ring-bg { stroke: rgba(199,125,255,.2); }
+.ai-icon { font-size: 2.5rem; }
+.ai-label { font-size: 1.5rem; font-weight: 800; letter-spacing: .02em; color: var(--ai); }
+.ai-desc { font-size: .72rem; color: var(--muted); margin-top: 2px; white-space: pre-line; }
+.ai-conf { font-family: var(--mono); font-size: .85rem; font-weight: 700; margin-left: auto; color: var(--ai); }
+
+/* ===== RESULT GRID ===== */
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+/* Algorithm cards */
+.algo-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  animation: fadeIn .4s ease;
+}
+.algo-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.algo-badge {
+  font-family: var(--mono);
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  padding: 3px 8px;
+  border-radius: 3px;
+  background: rgba(0,229,255,.1);
+  color: var(--accent);
+  border: 1px solid rgba(0,229,255,.2);
+}
+.algo-status {
+  font-size: .65rem;
+  font-family: var(--mono);
+}
+.algo-status.ok { color: var(--safe); }
+.algo-status.error { color: var(--danger); }
+
+.conf-bar-bg {
+  height: 5px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.conf-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width .8s ease;
+}
+.conf-bar-fill.high   { background: var(--danger); }
+.conf-bar-fill.medium { background: var(--warn); }
+.conf-bar-fill.low    { background: var(--safe); }
+
+.algo-stats { display: flex; gap: 16px; }
+.stat { text-align: center; }
+.stat-val { font-family: var(--mono); font-size: .9rem; font-weight: 700; color: var(--text); }
+.stat-key { font-size: .6rem; color: var(--muted); margin-top: 1px; }
+
+/* ===== IMAGE TABS ===== */
+.img-tabs-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  animation: fadeIn .4s .15s both;
+}
+.tab-nav {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+.tab-btn {
+  flex: 1;
+  padding: 11px 6px;
+  background: transparent;
+  border: none;
+  font-family: var(--mono);
+  font-size: .68rem;
+  letter-spacing: .1em;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all .2s;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: rgba(0,229,255,.04);
+}
+.tab-content { display: none; padding: 16px; }
+.tab-content.active { display: flex; }
+.result-img {
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  border-radius: 4px;
+  display: block;
+  margin: 0 auto;
+  background: #000;
+}
+
+/* ===== TASKBOARD ===== */
+#page-taskboard { display: none; min-height: calc(100vh - 61px); }
+.board {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  padding: 28px;
+}
+.board-col {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.col-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.col-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.col-title { font-family: var(--mono); font-size: .72rem; letter-spacing: .12em; color: var(--muted); }
+.col-count {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: .65rem;
+  color: var(--muted);
+  background: var(--bg);
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+.task-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  cursor: default;
+  transition: border-color .2s;
+}
+.task-card:hover { border-color: var(--accent); }
+.task-card-title { font-size: .78rem; font-weight: 600; margin-bottom: 4px; line-height: 1.3; }
+.task-tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: .58rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: .08em;
+}
+.task-pts {
+  font-family: var(--mono);
+  font-size: .65rem;
+  color: var(--warn);
+  margin-top: 5px;
+}
+
+/* ===== ABOUT / MANUAL ===== */
+#page-manual { display: none; padding: 36px; min-height: calc(100vh - 61px); }
+.manual-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.manual-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.manual-card h3 { font-size: .9rem; margin-bottom: 10px; }
+.manual-card p, .manual-card li {
+  font-size: .78rem;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.manual-card ul { padding-left: 18px; }
+.manual-card code {
+  font-family: var(--mono);
+  background: var(--bg);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: .72rem;
+  color: var(--accent);
+}
+
+/* ===== FSM DIAGRAM ===== */
+#page-fsm { display: none; padding: 36px; min-height: calc(100vh - 61px); }
+.fsm-diagram {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  overflow-x: auto;
+  padding: 40px 20px;
+}
+.fsm-bubble {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 90px;
+}
+.fsm-circle {
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono);
+  font-size: .65rem;
+  text-align: center;
+  background: rgba(0,229,255,.06);
+  color: var(--accent);
+  font-weight: 700;
+  line-height: 1.2;
+}
+.fsm-bubble span { font-size: .6rem; color: var(--muted); font-family: var(--mono); }
+.fsm-edge {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 60px;
+}
+.fsm-edge-line {
+  width: 100%;
+  height: 2px;
+  background: var(--border);
+  position: relative;
+}
+.fsm-edge-line::after {
+  content: '▶';
+  position: absolute;
+  right: -6px;
+  top: -8px;
+  color: var(--muted);
+  font-size: .7rem;
+}
+.fsm-edge-label { font-family: var(--mono); font-size: .6rem; color: var(--muted); margin-top: 6px; }
+
+/* Effort table */
+.effort-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+.effort-table th, .effort-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  font-size: .78rem;
+}
+.effort-table th { font-family: var(--mono); font-size: .65rem; letter-spacing: .12em; color: var(--muted); }
+.effort-table td:last-child { font-family: var(--mono); color: var(--accent); }
+.effort-total { font-family: var(--mono); font-weight: 700; color: var(--accent3); }
+
+/* ===== TOAST ===== */
+.toast {
+  position: fixed;
+  bottom: 24px; right: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 18px;
+  font-family: var(--mono);
+  font-size: .75rem;
+  z-index: 9999;
+  transform: translateY(80px);
+  opacity: 0;
+  transition: all .3s;
+}
+.toast.show { transform: none; opacity: 1; }
+.toast.error { border-color: var(--danger); color: var(--danger); }
+.toast.success { border-color: var(--safe); color: var(--safe); }
+
+/* Responsive */
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; }
+  aside { border-right: none; border-bottom: 1px solid var(--border); }
+  .board { grid-template-columns: 1fr 1fr; }
+  .manual-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ===== HEADER ===== -->
+<header>
+  <div class="logo">
+    <span class="bracket">[</span>
+    <span class="name">ForensIQ</span>
+    <span class="bracket">]</span>
+    <span class="tag">v1.0</span>
+  </div>
+  <nav class="nav-pills">
+    <a class="pill active" onclick="showPage('analyzer')">🔍 Analiz</a>
+    <a class="pill" onclick="showPage('taskboard')">📋 Task Board</a>
+    <a class="pill" onclick="showPage('fsm')">⚙️ FSM / Emek</a>
+    <a class="pill" onclick="showPage('manual')">📖 Kılavuz</a>
+  </nav>
+</header>
+
+<!-- ===== ANALYZER PAGE ===== -->
+<div id="page-analyzer">
+<main>
+
+  <!-- SIDEBAR -->
+  <aside>
+
+    <!-- Upload -->
+    <div>
+      <div class="section-label">Görüntü Yükle</div>
+      <div class="drop-zone" id="drop-zone">
+        <input type="file" id="file-input" accept="image/*,.gif" />
+        <span class="drop-icon">🖼️</span>
+        <h3>Dosya sürükle & bırak</h3>
+        <p>veya tıkla · JPG, PNG, BMP, TIFF, WEBP, GIF</p>
+        <img id="preview-thumb" alt="önizleme" />
+      </div>
+    </div>
+
+    <!-- Algorithms -->
+    <div>
+      <div class="section-label">Algoritmalar</div>
+      <div class="algo-grid" id="algo-grid">
+        <!-- filled by JS -->
+      </div>
+    </div>
+
+    <!-- Analyze button -->
+    <button class="btn-analyze" id="btn-analyze" disabled onclick="runAnalysis()">
+      <div class="spinner"></div>
+      <span class="btn-text">ANALİZ ET</span>
+    </button>
+
+    <!-- FSM status -->
+    <div class="fsm-bar">
+      <div class="fsm-title">// FSM DURUMU</div>
+      <div class="fsm-states" id="fsm-states">
+        <span class="fsm-node" data-state="IDLE">IDLE</span>
+        <span class="fsm-arrow">→</span>
+        <span class="fsm-node" data-state="UPLOAD">UPLOAD</span>
+        <span class="fsm-arrow">→</span>
+        <span class="fsm-node" data-state="PREPROCESS">PREP</span>
+        <span class="fsm-arrow">→</span>
+        <span class="fsm-node" data-state="ANALYZE">ANALYZE</span>
+        <span class="fsm-arrow">→</span>
+        <span class="fsm-node" data-state="REPORT">REPORT</span>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <div class="content" id="main-content">
+    <div class="empty-state" id="empty-state">
+      <span class="big-icon">🔬</span>
+      <h2>Görüntü Forensik Analizi</h2>
+      <p>Analiz etmek istediğiniz görüntüyü sol panelden yükleyin, algoritmaları seçin ve başlatın.</p>
+    </div>
+
+    <!-- Results (hidden until analysis) -->
+    <div id="results" style="display:none">
+
+      <!-- Verdict + AI side by side -->
+      <div class="vai" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:stretch">
+
+        <!-- Verdict banner -->
+        <div id="verdict-banner" class="verdict-banner" style="margin:0">
+          <div class="verdict-left">
+            <span class="verdict-icon" id="verdict-icon"></span>
+            <div>
+              <div class="verdict-title" id="verdict-title"></div>
+              <div class="verdict-sub" id="verdict-sub"></div>
+            </div>
+          </div>
+          <div class="confidence-ring">
+            <svg viewBox="0 0 90 90" width="90" height="90">
+              <circle class="ring-bg" cx="45" cy="45" r="38" />
+              <circle class="ring-fill" id="ring-fill" cx="45" cy="45" r="38"
+                stroke-dasharray="238.76"
+                stroke-dashoffset="238.76" />
+            </svg>
+            <div class="ring-label">
+              <span class="ring-pct" id="ring-pct">0%</span>
+              <span class="ring-txt">SAHTE</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Badge with ring -->
+        <div class="ai-badge" id="ai-badge" style="margin:0;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:12px;width:100%">
+            <span class="ai-icon">🤖</span>
+            <div style="flex:1">
+              <div class="ai-label" id="ai-label">AI TESPİT</div>
+              <div class="ai-desc" id="ai-desc" style="margin-top:3px"></div>
+            </div>
+            <div class="confidence-ring">
+              <svg viewBox="0 0 90 90" width="90" height="90">
+                <circle class="ring-bg" cx="45" cy="45" r="38" />
+                <circle class="ring-fill" id="ai-ring-fill" cx="45" cy="45" r="38"
+                  stroke="var(--ai)"
+                  stroke-dasharray="238.76"
+                  stroke-dashoffset="238.76" />
+              </svg>
+              <div class="ring-label">
+                <span class="ring-pct" id="ai-ring-pct">0%</span>
+                <span class="ring-txt" style="color:var(--ai)">AI</span>
+              </div>
+            </div>
+          </div>
+          <!-- 8-signal detail grid -->
+          <div id="ai-signal-grid" style="
+            display:grid;grid-template-columns:1fr 1fr;gap:5px;width:100%;
+            font-family:var(--mono);font-size:.6rem;
+          "></div>
+        </div>
+
+      </div>
+
+      <!-- Algorithm result cards -->
+      <div>
+        <div class="section-label"> Algoritma Sonuçları</div>
+        <div class="result-grid" id="result-grid"></div>
+      </div>
+
+      <!-- Image tabs -->
+      <div class="img-tabs-section">
+        <div class="tab-nav">
+          <button class="tab-btn active" onclick="switchTab('annotated')">🗺️ ANNOTATED</button>
+          <button class="tab-btn" onclick="switchTab('heatmap')">🔥 HEATMAP</button>
+          <button class="tab-btn" onclick="switchTab('ela')">⚡ ELA</button>
+          <button class="tab-btn" onclick="switchTab('original')">📷 ORİJİNAL</button>
+        </div>
+        <div class="tab-content active" id="tab-annotated">
+          <img class="result-img" id="img-annotated" alt="annotated" />
+        </div>
+        <div class="tab-content" id="tab-heatmap">
+          <img class="result-img" id="img-heatmap" alt="heatmap" />
+        </div>
+        <div class="tab-content" id="tab-ela">
+          <img class="result-img" id="img-ela" alt="ela" />
+        </div>
+        <div class="tab-content" id="tab-original">
+          <img class="result-img" id="img-original" alt="original" />
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+</div>
+
+<!-- ===== TASKBOARD PAGE ===== -->
+<div id="page-taskboard">
+  <div class="board" id="board-container"></div>
+</div>
+
+<!-- ===== FSM PAGE ===== -->
+<div id="page-fsm">
+  <div style="padding:0 0 20px 0">
+    <div class="section-label" style="padding:0 36px">FSM Durum Diyagramı</div>
+    <div class="fsm-diagram" id="fsm-big-diagram"></div>
+  </div>
+  <div style="padding:0 36px">
+    <div class="section-label">Emek Hesabı (FSM Yöntemi)</div>
+    <table class="effort-table" id="effort-table"></table>
+  </div>
+</div>
+
+<!-- ===== MANUAL PAGE ===== -->
+<div id="page-manual">
+  <div class="section-label" style="margin-bottom:20px">Kullanıcı Kılavuzu</div>
+  <div class="manual-grid" id="manual-content"></div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+</div><!-- .app -->
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+const ALGORITHMS = [
+  { id:"sift",  name:"SIFT",  desc:"Kopyala-yapıştır manipülasyon tespiti", color:"#00e5ff" },
+  { id:"surf",  name:"SURF",  desc:"Hızlandırılmış özellik eşleştirme",      color:"#a3ff47" },
+  { id:"akaze", name:"AKAZE", desc:"Doğrusal olmayan difüzyon bazlı",         color:"#ffcc00" },
+  { id:"orb",   name:"ORB",   desc:"Gerçek zamanlı özellik tespiti",          color:"#ff9d00" },
+];
+
+let selectedFile = null;
+let selectedAlgos = new Set(["sift","surf","akaze","orb"]);
+const API = "http://localhost:5050/api";
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener("DOMContentLoaded", () => {
+  buildAlgoGrid();
+  buildTaskBoard();
+  buildFsmPage();
+  buildManualPage();
+  setFsmState("IDLE");
+
+  // File input
+  document.getElementById("file-input").addEventListener("change", e => {
+    if (e.target.files[0]) handleFile(e.target.files[0]);
+  });
+
+  // Drag & drop
+  const dz = document.getElementById("drop-zone");
+  dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("drag-over"); });
+  dz.addEventListener("dragleave", () => dz.classList.remove("drag-over"));
+  dz.addEventListener("drop", e => {
+    e.preventDefault(); dz.classList.remove("drag-over");
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+});
+
+// ============================================================
+// ALGO GRID
+// ============================================================
+function buildAlgoGrid() {
+  const grid = document.getElementById("algo-grid");
+  grid.innerHTML = ALGORITHMS.map(a => `
+    <div class="algo-item ${selectedAlgos.has(a.id) ? 'selected' : ''}"
+         onclick="toggleAlgo('${a.id}', this)" data-id="${a.id}">
+      <div class="algo-check" style="${selectedAlgos.has(a.id) ? `background:${a.color};border-color:${a.color};color:#080c12` : ''}">✓</div>
+      <div>
+        <div class="algo-name" style="color:${a.color}">${a.name}</div>
+        <div class="algo-desc">${a.desc}</div>
+      </div>
+    </div>`).join("");
+}
+
+function toggleAlgo(id, el) {
+  if (selectedAlgos.has(id)) {
+    if (selectedAlgos.size === 1) { toast("En az bir algoritma seçili olmalı.", "error"); return; }
+    selectedAlgos.delete(id);
+    el.classList.remove("selected");
+    el.querySelector(".algo-check").style.cssText = "";
+  } else {
+    selectedAlgos.add(id);
+    el.classList.add("selected");
+    const a = ALGORITHMS.find(x => x.id === id);
+    el.querySelector(".algo-check").style.cssText = `background:${a.color};border-color:${a.color};color:#080c12`;
+  }
+}
+
+// ============================================================
+// FILE HANDLING
+// ============================================================
+function handleFile(file) {
+  selectedFile = file;
+  const dz = document.getElementById("drop-zone");
+  const thumb = document.getElementById("preview-thumb");
+  dz.classList.add("has-file");
+  thumb.style.display = "block";
+  thumb.src = URL.createObjectURL(file);
+  document.getElementById("btn-analyze").disabled = false;
+  document.getElementById("img-original").src = thumb.src;
+  hideResults();
+}
+
+// ============================================================
+// FSM VISUALIZATION
+// ============================================================
+const FSM_STATES = ["IDLE","UPLOAD","PREPROCESS","ANALYZE","REPORT"];
+
+function setFsmState(state) {
+  const nodes = document.querySelectorAll("#fsm-states .fsm-node");
+  const idx = FSM_STATES.indexOf(state);
+  nodes.forEach((n, i) => {
+    n.classList.remove("active","done");
+    if (i < idx) n.classList.add("done");
+    if (i === idx) n.classList.add("active");
+  });
+}
+
+// ============================================================
+// ANALYSIS
+// ============================================================
+async function runAnalysis() {
+  if (!selectedFile) { toast("Lütfen önce bir görüntü seçin.", "error"); return; }
+  const btn = document.getElementById("btn-analyze");
+  btn.disabled = true; btn.classList.add("loading");
+
+  const steps = ["IDLE","UPLOAD","PREPROCESS","ANALYZE","REPORT"];
+  let stepIdx = 0;
+  const fsmTimer = setInterval(() => {
+    if (stepIdx < steps.length) { setFsmState(steps[stepIdx++]); }
+    else clearInterval(fsmTimer);
+  }, 400);
+
+  try {
+    const fd = new FormData();
+    fd.append("file", selectedFile);
+    fd.append("algorithms", [...selectedAlgos].join(","));
+
+    let data;
+    try {
+      const res = await fetch(`${API}/analyze`, { method:"POST", body:fd });
+      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+      data = await res.json();
+    } catch(fetchErr) {
+      data = generateDemoResult();
+      toast("Backend bağlantısı yok — demo sonuç gösteriliyor.", "error");
+    }
+
+    clearInterval(fsmTimer);
+    setFsmState("REPORT");
+    setTimeout(() => setFsmState("IDLE"), 1200);
+
+    try {
+      displayResults(data);
+    } catch(displayErr) {
+      console.error("displayResults error:", displayErr);
+      toast("Sonuç gösterilirken hata: " + displayErr.message, "error");
+    }
+
+  } catch(outerErr) {
+    clearInterval(fsmTimer);
+    setFsmState("IDLE");
+    console.error("runAnalysis outer error:", outerErr);
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove("loading");
+  }
+}
+
+// ============================================================
+// DISPLAY RESULTS
+// ============================================================
+function displayResults(data) {
+  document.getElementById("empty-state").style.display = "none";
+  document.getElementById("results").style.display = "block";
+
+  // Verdict
+  const banner = document.getElementById("verdict-banner");
+  banner.className = `verdict-banner ${data.tampered ? "tampered" : "clean"}`;
+  document.getElementById("verdict-icon").textContent = data.tampered ? "⚠️" : "✅";
+  document.getElementById("verdict-title").textContent = data.tampered
+    ? "EDİTLENMİŞ GÖRÜNTÜ"
+    : "EDİT TESPİT EDİLEMEDİ";
+document.getElementById("verdict-sub").textContent =
+    `Birleşik güven skoru: %${data.confidence.toFixed(1)} \nELA: %${(data.ela_confidence||0).toFixed(1)} \nGörüntü: ${data.image_size?.width}×${data.image_size?.height}`;
+
+  // Ring
+  const circumference = 238.76;
+  const offset = circumference - (data.confidence / 100) * circumference;
+  document.getElementById("ring-fill").style.strokeDashoffset = offset;
+  document.getElementById("ring-pct").textContent = `%${Math.round(data.confidence)}`;
+
+  // AI badge
+  const aiConf = data.ai_confidence || 0;
+  const aiGenerated = data.ai_generated || false;
+  const verdictLabel = data.ai_verdict_label || (aiGenerated ? "AI ALGILANDI" : "AI ALGILANMADI");
+  const signalDetail = data.ai_signal_detail || [];
+
+  document.getElementById("ai-label").textContent = verdictLabel;
+  document.getElementById("ai-label").style.color = aiGenerated ? "var(--danger)" : "var(--safe)";
+  document.getElementById("ai-desc").textContent =
+    `${signalDetail.filter(s=>s.score>=60).length}/${signalDetail.length} sinyal AI imzası tespit etti`;
+
+  // Animate AI ring
+  const aiOffset = 238.76 - (aiConf / 100) * 238.76;
+  document.getElementById("ai-ring-fill").style.strokeDashoffset = aiOffset;
+  document.getElementById("ai-ring-pct").textContent = `%${Math.round(aiConf)}`;
+
+  // Signal detail grid
+  const sigGrid = document.getElementById("ai-signal-grid");
+  if (signalDetail.length > 0) {
+    sigGrid.innerHTML = signalDetail.map(s => {
+      const hot = s.score >= 60;
+      return `<div style="
+        padding:4px 6px;border-radius:3px;
+        background:${hot ? 'rgba(255,61,107,.12)' : 'rgba(255,255,255,.04)'};
+        border:1px solid ${hot ? 'rgba(255,61,107,.35)' : 'var(--border)'};
+      ">
+        <div style="color:${hot ? 'var(--danger)' : 'var(--muted)'};font-weight:700">
+          ${hot ? '⚠' : '✓'} ${s.name}
+        </div>
+        <div style="color:var(--muted);margin-top:2px;font-size:.55rem;line-height:1.3">${s.label}</div>
+      </div>`;
+    }).join("");
+  } else {
+    // Fallback for old API response (cnn/lstm fields)
+    const cnnC = data.ai_cnn_confidence || 0;
+    const lstmC = data.ai_lstm_confidence || 0;
+    sigGrid.innerHTML = `
+      <div style="padding:4px 6px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:3px">
+        <div style="color:var(--muted)">CNN</div>
+        <div style="color:var(--ai)">%${cnnC.toFixed(1)}</div>
+      </div>
+      <div style="padding:4px 6px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:3px">
+        <div style="color:var(--muted)">LSTM</div>
+        <div style="color:var(--ai)">%${lstmC.toFixed(1)}</div>
+      </div>`;
+  }
+
+  // Algorithm cards
+  const grid = document.getElementById("result-grid");
+  const results = data.algorithm_results || {};
+  grid.innerHTML = Object.values(results).map(r => {
+    const conf = r.confidence || 0;
+    const level = conf > 60 ? "high" : conf > 30 ? "medium" : "low";
+    const a = ALGORITHMS.find(x => x.id === r.algorithm?.toLowerCase()) || {};
+    return `
+      <div class="algo-card">
+        <div class="algo-card-header">
+          <span class="algo-badge" style="color:${a.color||'var(--accent)'}; border-color:${a.color||'var(--accent)'}20; background:${a.color||'var(--accent)'}11">
+            ${r.algorithm}
+          </span>
+          <span class="algo-status ${r.status==='ok'?'ok':'error'}">${r.status==='ok'?'✓ OK':'⚠ HATA'}</span>
+        </div>
+        <div class="conf-bar-bg">
+          <div class="conf-bar-fill ${level}" style="width:${conf}%"></div>
+        </div>
+        <div class="algo-stats">
+          <div class="stat">
+            <div class="stat-val" style="color:${level==='high'?'var(--danger)':level==='medium'?'var(--warn)':'var(--safe)'}">%${conf.toFixed(1)}</div>
+            <div class="stat-key">GÜVEN</div>
+          </div>
+          <div class="stat">
+            <div class="stat-val">${r.keypoint_count||0}</div>
+            <div class="stat-key">NOKTA</div>
+          </div>
+          <div class="stat">
+            <div class="stat-val">${r.match_count||0}</div>
+            <div class="stat-key">EŞLEŞİM</div>
+          </div>
+        </div>
+      </div>`;
+  }).join("");
+
+  // Images
+  if (data.annotated_b64) document.getElementById("img-annotated").src = `data:image/png;base64,${data.annotated_b64}`;
+  if (data.heatmap_b64)   document.getElementById("img-heatmap").src   = `data:image/png;base64,${data.heatmap_b64}`;
+  if (data.ela_b64)       document.getElementById("img-ela").src       = `data:image/png;base64,${data.ela_b64}`;
+
+  switchTab("annotated");
+  // GIF notification
+  if (data.file_format === 'GIF') {
+    const gifMsg = data.gif_animated
+      ? `GIF formatı algılandı — ${data.gif_frames} frame, ilk kare analiz edildi.`
+      : "GIF formatı algılandı — statik, analiz tamamlandı.";
+    toast(gifMsg, "success");
+  }
+  toast("Analiz tamamlandı!", "success");
+}
+
+function hideResults() {
+  document.getElementById("empty-state").style.display = "flex";
+  document.getElementById("results").style.display = "none";
+}
+
+// ============================================================
+// TABS
+// ============================================================
+function switchTab(id) {
+  document.querySelectorAll(".tab-btn").forEach((b,i) => {
+    const ids = ["annotated","heatmap","ela","original"];
+    b.classList.toggle("active", ids[i] === id);
+  });
+  document.querySelectorAll(".tab-content").forEach(c => {
+    c.classList.toggle("active", c.id === `tab-${id}`);
+  });
+}
+
+// ============================================================
+// PAGE NAVIGATION
+// ============================================================
+function showPage(name) {
+  ["analyzer","taskboard","fsm","manual"].forEach(p => {
+    document.getElementById(`page-${p}`).style.display = "none";
+  });
+  // analyzer contains <main> with grid — restore its natural display
+  document.getElementById(`page-${name}`).style.display = (name === "analyzer") ? "" : "block";
+  document.querySelectorAll(".pill").forEach((p,i) => {
+    const pages = ["analyzer","taskboard","fsm","manual"];
+    p.classList.toggle("active", pages[i] === name);
+  });
+}
+
+// ============================================================
+// TASK BOARD
+// ============================================================
+const TASKS = {
+  "TODO": [
+    { title:"SonarQube entegrasyonu kur", tag:"Kalite", color:"#ff9d00", pts:"10 puan" },
+    { title:"Doxygen yorum standardı ekle", tag:"Dokümantasyon", color:"#00e5ff", pts:"10 puan" },
+    { title:"Graphviz çağrı grafiği üret", tag:"Analiz", color:"#a3ff47", pts:"10 puan" },
+  ],
+  "IN PROGRESS": [
+    { title:"SIFT copy-move detector", tag:"Algoritma", color:"#00e5ff", pts:"10 puan" },
+    { title:"SURF özellik eşleştirme", tag:"Algoritma", color:"#a3ff47", pts:"10 puan" },
+    { title:"Flask REST API", tag:"Backend", color:"#ffcc00", pts:"—" },
+  ],
+  "REVIEW": [
+    { title:"ELA heatmap görselleştirme", tag:"Görsel", color:"#c77dff", pts:"—" },
+    { title:"AI tespit heuristiği", tag:"AI", color:"#ff3d6b", pts:"Bonus" },
+    { title:"FSM emek hesabı tablosu", tag:"FSM", color:"#ffcc00", pts:"10 puan" },
+  ],
+  "DONE": [
+    { title:"Proje iskelet yapısı", tag:"Setup", color:"#a3ff47", pts:"—" },
+    { title:"ORB dedektör entegrasyon", tag:"Algoritma", color:"#ff9d00", pts:"—" },
+    { title:"AKAZE entegrasyon", tag:"Algoritma", color:"#ffcc00", pts:"—" },
+    { title:"React/HTML UI arayüzü", tag:"Frontend", color:"#00e5ff", pts:"10 puan" },
+    { title:"Kullanıcı kılavuzu (PDF/Word)", tag:"Döküman", color:"#a3ff47", pts:"10 puan" },
+  ]
+};
+
+const COL_COLORS = {
+  "TODO": "#ff3d6b",
+  "IN PROGRESS": "#ffcc00",
+  "REVIEW": "#c77dff",
+  "DONE": "#a3ff47"
+};
+
+function buildTaskBoard() {
+  const container = document.getElementById("board-container");
+  container.innerHTML = Object.entries(TASKS).map(([col, tasks]) => `
+    <div class="board-col">
+      <div class="col-header">
+        <div class="col-dot" style="background:${COL_COLORS[col]}"></div>
+        <span class="col-title">${col}</span>
+        <span class="col-count">${tasks.length}</span>
+      </div>
+      ${tasks.map(t => `
+        <div class="task-card">
+          <div class="task-card-title">${t.title}</div>
+          <span class="task-tag" style="background:${t.color}18;color:${t.color};border:1px solid ${t.color}40">${t.tag}</span>
+          ${t.pts !== "—" ? `<div class="task-pts">${t.pts}</div>` : ""}
+        </div>`).join("")}
+    </div>`).join("");
+}
+
+// ============================================================
+// FSM PAGE
+// ============================================================
+function buildFsmPage() {
+  // Big diagram
+  const diag = document.getElementById("fsm-big-diagram");
+  const states = [
+    { name:"IDLE",       sub:"Bekleme" },
+    { name:"UPLOAD",     sub:"Dosya Al" },
+    { name:"PREPROCESS", sub:"Ön İşle" },
+    { name:"ANALYZE",    sub:"Analiz" },
+    { name:"REPORT",     sub:"Raporla" },
+  ];
+  const edges = ["Dosya Seç","Normalize","Algo Çalıştır","Sonuç Üret"];
+  let html = "";
+  states.forEach((s, i) => {
+    html += `<div class="fsm-bubble"><div class="fsm-circle">${s.name}</div><span>${s.sub}</span></div>`;
+    if (i < states.length - 1) {
+      html += `<div class="fsm-edge"><div class="fsm-edge-line"></div><span class="fsm-edge-label">${edges[i]}</span></div>`;
+    }
+  });
+  diag.innerHTML = html;
+
+  // Effort table
+  const effortData = [
+    ["IDLE → UPLOAD",           "Kullanıcı etkileşimi & dosya doğrulama",    "0.5 saat"],
+    ["UPLOAD → PREPROCESS",     "Görüntü normalize & gri dönüşümü",          "1.0 saat"],
+    ["PREPROCESS → ANALYZE",    "SIFT / SURF / AKAZE / ORB ","6.0 saat"],
+    ["PREPROCESS → ANALYZE",    "ELA analizi",                               "2.0 saat"],
+    ["PREPROCESS → ANALYZE",    "AI tespit heuristiği",                      "2.5 saat"],
+    ["ANALYZE → REPORT",        "Heatmap & annotate render",                 "1.5 saat"],
+    ["ANALYZE → REPORT",        "JSON raporlama & API",                      "1.0 saat"],
+    ["Sistem Geneli",           "UI/UX geliştirme",                          "4.0 saat"],
+    ["Sistem Geneli",           "Test & hata düzeltme",                      "3.0 saat"],
+    ["Sistem Geneli",           "Doxygen/SonarQube/Graphviz entegrasyonu",   "2.0 saat"],
+    ["Sistem Geneli",           "Kullanıcı kılavuzu yazımı",                 "2.0 saat"],
+  ];
+  const total = effortData.reduce((s, r) => s + parseFloat(r[2]), 0);
+  document.getElementById("effort-table").innerHTML = `
+    <thead><tr><th>FSM GEÇİŞ</th><th>GÖREV</th><th>EMEK (SAAT)</th></tr></thead>
+    <tbody>
+      ${effortData.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join("")}
+      <tr style="border-top:2px solid var(--accent)">
+        <td colspan="2" class="effort-total">TOPLAM</td>
+        <td class="effort-total">${total.toFixed(1)} saat</td>
+      </tr>
+    </tbody>`;
+}
+
+// ============================================================
+// MANUAL PAGE
+// ============================================================
+function buildManualPage() {
+  const sections = [
+    { icon:"🚀", title:"Hızlı Başlangıç", body:`
+      <ul>
+        <li>Backend: <code>cd backend && python app.py</code></li>
+        <li>Frontend: <code>index.html</code> tarayıcıda aç</li>
+        <li>API default: <code>http://localhost:5050</code></li>
+      </ul>` },
+    { icon:"🔍", title:"Algoritma Açıklamaları", body:`
+      <ul>
+        <li><b>SIFT</b> — Ölçek-dönüşüm değişmez özellik tespiti. Kopyala-yapıştır tespitinde standarttır.</li>
+        <li><b>SURF</b> — SIFT'in ~3× hızlı versiyonu. opencv-contrib gerektirir.</li>
+        <li><b>AKAZE</b> — Doğrusal olmayan difüzyon. Gürültüye karşı güçlü.</li>
+        <li><b>ORB</b> — Patent-free, gerçek zamanlı. Hamming mesafesi kullanır.</li>
+        <li><b>ELA</b> — JPEG sıkıştırma hata seviyesi analizi.</li>
+      </ul>` },
+    { icon:"📊", title:"Güven Skoru Yorumu", body:`
+      <ul>
+        <li><b>0–25%</b> — Görüntü büyük ihtimalle orijinal</li>
+        <li><b>25–50%</b> — Şüpheli, ek inceleme önerilir</li>
+        <li><b>50–75%</b> — Manipülasyon işaretleri mevcut</li>
+        <li><b>75–100%</b> — Yüksek ihtimalle manipüle edilmiş</li>
+      </ul>` },
+    { icon:"🤖", title:"AI Tespit Yöntemi (CNN + LSTM)", body:`
+      <p>İki bağımsız algoritma birleştirilerek kullanılmaktadır:</p>
+      <ul>
+        <li><b>CNN Öznitelik Analizi (%55 ağırlık):</b> Gabor, LoG ve yönlü kenar kernelleri ile konvolüsyon uygulanır. Aktivasyon varyansı, yüksek/düşük frekans oranı ve yama entropisine bakılır.</li>
+        <li><b>LSTM Dizi Analizi (%45 ağırlık):</b> Her satır bir zaman adımı olarak işlenir. Satırlar arası delta düzlüğü, otokorelasyon periyodisitesi ve gradyan tutarlılığı ölçülür.</li>
+        <li>İki skor sigmoid ile normalize edilerek ağırlıklı birleşim hesaplanır.</li>
+        <li>Eşik: %50 üzeri → "AI üretimi" etiketi</li>
+      </ul>` },
+    { icon:"⚙️", title:"Sistem Gereksinimleri", body:`
+      <ul>
+        <li>Python 3.9+</li>
+        <li>OpenCV 4.9+</li>
+        <li>Flask 3.0+</li>
+        <li>8GB RAM önerilir (büyük görseller için)</li>
+        <li>SURF için: <code>opencv-contrib-python</code></li>
+      </ul>` },
+    { icon:"📁", title:"Proje Yapısı", body:`
+      <ul>
+        <li><code>backend/app.py</code> — Flask API</li>
+        <li><code>backend/forensics_engine.py</code> — Algoritma motoru</li>
+        <li><code>frontend/index.html</code> — Tek sayfalık UI</li>
+        <li><code>docs/</code> — Kılavuz ve raporlar</li>
+        <li><code>Doxyfile</code> — Doxygen yapılandırması</li>
+      </ul>` },
+  ];
+  document.getElementById("manual-content").innerHTML =
+    sections.map(s => `
+      <div class="manual-card">
+        <h3>${s.icon} ${s.title}</h3>
+        ${s.body}
+      </div>`).join("");
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+function toast(msg, type="success") {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.className = `toast ${type} show`;
+  setTimeout(() => el.classList.remove("show"), 3200);
+}
+</script>
+</body>
+</html>
