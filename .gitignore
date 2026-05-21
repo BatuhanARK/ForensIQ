@@ -25,3 +25,6 @@ __pycache__/
 *.jpeg
 *.png
 *.gif
+
+# Doxyfiles
+docs/
